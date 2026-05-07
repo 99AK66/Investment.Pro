@@ -1,671 +1,679 @@
-<!DOCTYPE html>
-<html lang="th">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Investment Planner — วางแผนการลงทุน</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;700;800&family=DM+Mono:wght@400;700&display=swap">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<style>
-  *{box-sizing:border-box;margin:0;padding:0;}
-  body{min-height:100vh;background:#07090f;color:#e2e8f0;font-family:'DM Sans',sans-serif;padding-bottom:56px;}
-  input::placeholder{color:#334155;}
-  input:focus{border-color:rgba(245,158,11,0.5)!important;box-shadow:0 0 0 2px rgba(245,158,11,0.1)!important;outline:none;}
-  input[type=number]::-webkit-inner-spin-button{opacity:0.3;}
-  @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-  .fadeUp{animation:fadeUp 0.3s ease;}
+import { useState, useMemo } from "react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 
-  /* Layout */
-  .header{background:linear-gradient(135deg,#0f1629,#0a0e1a);border-bottom:1px solid rgba(245,158,11,0.15);padding:22px 20px 16px;text-align:center;}
-  .header-sup{font-size:10px;letter-spacing:4px;color:#f59e0b;font-family:'DM Mono',monospace;margin-bottom:6px;}
-  .header-title{font-size:22px;font-weight:800;letter-spacing:-0.5px;}
-  .header-sub{font-size:11px;color:#475569;margin-top:4px;font-family:'DM Mono',monospace;}
-  .accent{color:#f59e0b;}
+// ─── Constants ───────────────────────────────────────────────────────────────
+const COLORS = [
+  "#f59e0b","#22c55e","#3b82f6","#a78bfa","#f43f5e",
+  "#06b6d4","#fb923c","#84cc16","#e879f9","#38bdf8",
+];
 
-  /* Tab bar */
-  .tab-bar{display:flex;gap:0;margin:16px 16px 0;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:4px;}
-  .tab-btn{flex:1;padding:10px 4px;border:none;background:transparent;border-radius:9px;color:#475569;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:all 0.18s;}
-  .tab-btn.active{background:rgba(245,158,11,0.12);color:#f59e0b;outline:1px solid rgba(245,158,11,0.3);}
-  .tab-btn .tab-desc{font-size:9px;font-family:'DM Mono',monospace;opacity:0.7;margin-top:2px;}
-  .tab-content{display:none;padding:0 16px;}
-  .tab-content.active{display:block;}
-
-  /* Inputs */
-  .inp{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 12px;color:#e2e8f0;font-size:13px;font-family:'DM Mono',monospace;width:100%;}
-  .label{font-size:10px;color:#64748b;margin-bottom:6px;font-family:'DM Mono',monospace;letter-spacing:1px;}
-
-  /* Cards / panels */
-  .panel{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:16px;margin-top:16px;}
-  .panel-title{font-size:11px;color:#64748b;letter-spacing:2px;font-family:'DM Mono',monospace;margin-bottom:14px;}
-  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-
-  /* Button */
-  .btn-primary{width:100%;padding:13px;background:#f59e0b;border:none;border-radius:10px;color:#000;font-weight:800;font-size:15px;cursor:pointer;font-family:'DM Sans',sans-serif;margin-top:14px;}
-  .btn-dashed{width:100%;padding:12px;background:transparent;color:#3b82f6;border:1.5px dashed rgba(59,130,246,0.5);border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;margin-top:14px;}
-
-  /* Result cards */
-  .result-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
-  .result-card{background:rgba(0,0,0,0.3);border-radius:9px;padding:10px 8px;text-align:center;border:1px solid rgba(255,255,255,0.06);}
-  .result-label{font-size:10px;color:#64748b;margin-bottom:5px;font-family:'DM Mono',monospace;}
-  .result-val{font-family:'DM Mono',monospace;font-size:11px;font-weight:700;}
-
-  /* Asset row */
-  .asset-row{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:14px;margin-bottom:12px;}
-  .asset-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;}
-  .asset-val-bar{display:flex;justify-content:space-between;align-items:center;background:rgba(0,0,0,0.3);border-radius:8px;padding:8px 12px;margin-top:10px;font-size:13px;border:1px solid rgba(255,255,255,0.06);}
-
-  /* Mini bar chart */
-  .mini-bar-wrap{display:flex;align-items:flex-end;gap:2px;height:60px;margin-top:16px;}
-  .mini-bar-col{flex:1;height:100%;display:flex;align-items:flex-end;}
-  .mini-bar{width:100%;background:linear-gradient(to top,#3b82f6,#f59e0b);border-radius:2px 2px 0 0;opacity:0.85;min-height:4px;}
-  .mini-bar-labels{display:flex;justify-content:space-between;font-size:10px;color:#475569;margin-top:4px;font-family:'DM Mono',monospace;}
-
-  /* Multi DCA */
-  .multi-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
-  .btn-auto{background:transparent;border:1px solid rgba(255,255,255,0.1);border-radius:7px;padding:5px 12px;color:#94a3b8;font-weight:600;cursor:pointer;font-size:11px;font-family:'DM Mono',monospace;}
-  .btn-add{background:#f59e0b;border:none;border-radius:7px;padding:5px 14px;color:#000;font-weight:800;cursor:pointer;font-size:13px;}
-  .asset-cols-header{display:grid;grid-template-columns:24px 1fr 80px 72px 32px;gap:8px;padding:0 4px 8px;font-size:10px;color:#475569;font-family:'DM Mono',monospace;letter-spacing:1px;border-bottom:1px solid rgba(255,255,255,0.06);}
-  .asset-row-multi{display:grid;grid-template-columns:24px 1fr 80px 72px 32px;gap:8px;align-items:center;margin-top:8px;}
-  .toggle-dot{width:18px;height:18px;border-radius:4px;border:2px solid currentColor;cursor:pointer;flex-shrink:0;}
-  .btn-remove{background:transparent;border:none;color:#334155;cursor:pointer;font-size:20px;line-height:1;}
-
-  /* Summary hero */
-  .summary-hero{background:linear-gradient(135deg,rgba(245,158,11,0.12),rgba(245,158,11,0.04));border:1px solid rgba(245,158,11,0.3);border-radius:14px;padding:14px 16px;margin-top:14px;display:flex;justify-content:space-between;align-items:center;}
-
-  /* Asset mini-cards */
-  .asset-mini-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:10px;}
-  .asset-mini-card{border-radius:12px;padding:12px;}
-
-  /* Sub-tabs */
-  .sub-tabs{display:flex;gap:4px;margin-top:14px;}
-  .sub-tab-btn{flex:1;padding:9px 4px;border-radius:8px;border:1px solid rgba(255,255,255,0.07);background:transparent;color:#64748b;font-size:12px;font-weight:700;cursor:pointer;font-family:'DM Mono',monospace;}
-  .sub-tab-btn.active{border-color:#f59e0b;background:rgba(245,158,11,0.1);color:#f59e0b;}
-  .sub-tab-content{display:none;}
-  .sub-tab-content.active{display:block;}
-
-  /* Chart wrapper */
-  .chart-wrap{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:18px 6px 12px;margin-top:10px;}
-  canvas{max-height:270px;}
-
-  /* Table */
-  .data-table{width:100%;border-collapse:collapse;font-family:'DM Mono',monospace;font-size:12px;}
-  .data-table th{padding:10px 12px;text-align:right;font-size:11px;color:#64748b;background:rgba(255,255,255,0.04);}
-  .data-table th:first-child{text-align:left;}
-  .data-table td{padding:9px 12px;text-align:right;border-top:1px solid rgba(255,255,255,0.05);}
-  .data-table td:first-child{text-align:left;color:#94a3b8;}
-
-  /* Milestone */
-  .milestone-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;}
-  .milestone-header{background:rgba(255,255,255,0.04);padding:10px 14px;font-size:11px;color:#64748b;font-family:'DM Mono',monospace;}
-  .milestone-row{padding:12px 14px;border-top:1px solid rgba(255,255,255,0.05);align-items:center;}
-  .ms-badge{display:inline-block;border-radius:8px;padding:4px 10px;font-size:12px;font-weight:700;font-family:'DM Mono',monospace;}
-
-  /* Donut SVG */
-  .donut-wrap{display:flex;align-items:center;gap:16px;margin-bottom:16px;padding:12px;background:rgba(255,255,255,0.03);border-radius:12px;border:1px solid rgba(255,255,255,0.07);}
-  .alloc-panel{margin-top:12px;background:rgba(255,255,255,0.03);border-radius:12px;padding:14px 12px;}
-
-  .warning{margin-top:10px;padding:12px 16px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:12px;font-size:12px;color:#f59e0b;font-family:'DM Mono',monospace;text-align:center;}
-  .footer-note{text-align:center;font-size:10px;color:#1e293b;margin-top:24px;padding:0 16px;line-height:1.8;}
-</style>
-</head>
-<body>
-
-<!-- HEADER -->
-<div class="header">
-  <div class="header-sup">INVESTMENT PLANNER</div>
-  <div class="header-title">วางแผน<span class="accent">การลงทุน</span></div>
-  <div class="header-sub">DCA · Portfolio Tracker · Multi-Asset Simulator</div>
-</div>
-
-<!-- MAIN TABS -->
-<div class="tab-bar">
-  <button class="tab-btn active" onclick="switchTab('simple',this)">
-    📈 DCA<div class="tab-desc">คำนวณรายตัว</div>
-  </button>
-  <button class="tab-btn" onclick="switchTab('portfolio',this)">
-    💼 พอร์ต<div class="tab-desc">ติดตามทรัพย์สิน</div>
-  </button>
-  <button class="tab-btn" onclick="switchTab('multi',this)">
-    🔀 Multi<div class="tab-desc">จัดพอร์ต DCA</div>
-  </button>
-</div>
-
-<!-- ═══ TAB 1: Simple DCA ═══ -->
-<div id="tab-simple" class="tab-content active">
-  <div class="panel">
-    <div class="panel-title">SIMPLE DCA CALC</div>
-    <div class="grid-2">
-      <div><div class="label">ชื่อทรัพย์สิน</div><input class="inp" id="s-name" type="text" placeholder="เช่น CPALL, KBANK…"></div>
-      <div><div class="label">DCA ต่อเดือน (฿)</div><input class="inp" id="s-monthly" type="number" placeholder="5000"></div>
-      <div><div class="label">ระยะเวลา (เดือน)</div><input class="inp" id="s-months" type="number" placeholder="120"></div>
-      <div><div class="label">ผลตอบแทนต่อปี (%)</div><input class="inp" id="s-growth" type="number" placeholder="7"></div>
-    </div>
-    <button class="btn-primary" onclick="calcSimple()">คำนวณ →</button>
-  </div>
-  <div id="simple-result" style="display:none" class="fadeUp">
-    <div class="panel" style="margin-top:14px;">
-      <div id="s-asset-name" style="font-size:15px;font-weight:800;color:#f59e0b;margin-bottom:14px;font-family:'DM Mono',monospace;"></div>
-      <div class="result-grid">
-        <div class="result-card"><div class="result-label">ลงทุนไป</div><div class="result-val" id="s-invested" style="color:#3b82f6"></div></div>
-        <div class="result-card"><div class="result-label">มูลค่าสุดท้าย</div><div class="result-val" id="s-final" style="color:#f59e0b"></div></div>
-        <div class="result-card"><div class="result-label">กำไรรวม</div><div class="result-val" id="s-gain"></div></div>
-      </div>
-      <div class="mini-bar-wrap" id="s-bars"></div>
-      <div class="mini-bar-labels"><span>เดือน 1</span><span id="s-month-end">เดือน 120</span></div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ TAB 2: Portfolio ═══ -->
-<div id="tab-portfolio" class="tab-content">
-  <div id="portfolio-summary" style="display:none" class="panel fadeUp">
-    <div class="result-grid">
-      <div style="text-align:center"><div class="label">พอร์ตรวม</div><div id="pt-total" style="font-family:'DM Mono',monospace;font-size:12px;font-weight:800;color:#f59e0b"></div></div>
-      <div style="text-align:center"><div class="label">ลงทุนไป</div><div id="pt-invested" style="font-family:'DM Mono',monospace;font-size:12px;font-weight:800;color:#94a3b8"></div></div>
-      <div style="text-align:center"><div class="label">กำไร/ขาดทุน</div><div id="pt-gain" style="font-family:'DM Mono',monospace;font-size:12px;font-weight:800"></div></div>
-    </div>
-  </div>
-  <div id="portfolio-donut-wrap" style="display:none;margin-top:12px;"></div>
-  <div id="portfolio-assets" style="margin-top:4px;"></div>
-  <button class="btn-dashed" onclick="addPortfolioAsset()">+ เพิ่มทรัพย์สิน</button>
-</div>
-
-<!-- ═══ TAB 3: Multi DCA ═══ -->
-<div id="tab-multi" class="tab-content">
-  <div class="panel" style="padding:16px;">
-    <div class="grid-2">
-      <div><div class="label">DCA ต่อเดือน (฿)</div><input class="inp" id="m-monthly" type="number" placeholder="10000" oninput="updateMulti()"></div>
-      <div><div class="label">ระยะเวลา (ปี)</div><input class="inp" id="m-years" type="number" placeholder="30" oninput="updateMulti()"></div>
-    </div>
-  </div>
-
-  <div class="panel" style="margin-top:12px;">
-    <div class="multi-header">
-      <div class="panel-title" style="margin-bottom:0">ASSETS</div>
-      <div style="display:flex;gap:8px">
-        <button class="btn-auto" onclick="autoBalance()">⚖️ Auto</button>
-        <button class="btn-add" onclick="addMultiAsset()">+ เพิ่ม</button>
-      </div>
-    </div>
-    <div class="asset-cols-header">
-      <span></span><span>ชื่อหุ้น</span><span style="text-align:center">CAGR %</span><span style="text-align:center">สัดส่วน</span><span></span>
-    </div>
-    <div id="multi-asset-rows"></div>
-    <div id="alloc-donut-wrap" class="alloc-panel" style="margin-top:12px;"></div>
-  </div>
-
-  <div id="multi-prompt" style="text-align:center;padding:28px 0;color:#334155;font-size:13px;font-family:'DM Mono',monospace;">← กรอก DCA/เดือน และระยะเวลาก่อน</div>
-  <div id="multi-alloc-warn" class="warning" style="display:none">⚠️ สัดส่วนรวม <span id="warn-alloc"></span>% — ต้องรวมได้ 100%</div>
-
-  <div id="multi-results" style="display:none">
-    <div class="summary-hero">
-      <div>
-        <div style="font-size:10px;color:#f59e0b;font-family:'DM Mono',monospace;letter-spacing:1px">🏆 พอร์ตรวมใน <span id="hero-years"></span> ปี</div>
-        <div id="hero-final" style="font-size:24px;font-weight:800;color:#fff;margin-top:4px"></div>
-        <div id="hero-final-full" style="font-size:11px;color:#64748b;margin-top:2px;font-family:'DM Mono',monospace"></div>
-      </div>
-      <div style="text-align:right">
-        <div style="font-size:11px;color:#64748b;font-family:'DM Mono',monospace">ลงทุนไป</div>
-        <div id="hero-invested" style="font-size:15px;font-weight:700;color:#94a3b8"></div>
-        <div id="hero-mult" style="font-size:13px;color:#22c55e;margin-top:4px;font-weight:700"></div>
-      </div>
-    </div>
-    <div class="asset-mini-grid" id="asset-mini-cards"></div>
-
-    <div class="sub-tabs">
-      <button class="sub-tab-btn active" onclick="switchSubTab('chart',this)">📈 กราฟ</button>
-      <button class="sub-tab-btn" onclick="switchSubTab('table',this)">📊 ตาราง</button>
-      <button class="sub-tab-btn" onclick="switchSubTab('milestone',this)">🏁 Milestone</button>
-    </div>
-    <div id="subtab-chart" class="sub-tab-content active">
-      <div class="chart-wrap"><canvas id="lineChart"></canvas>
-        <div id="chart-legend" style="display:flex;flex-wrap:wrap;gap:8px;padding:6px 10px 0;justify-content:center;"></div>
-      </div>
-    </div>
-    <div id="subtab-table" class="sub-tab-content">
-      <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:14px;margin-top:10px;overflow-x:auto">
-        <table class="data-table" id="data-table"></table>
-      </div>
-    </div>
-    <div id="subtab-milestone" class="sub-tab-content">
-      <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:14px;margin-top:10px;overflow:hidden">
-        <div id="milestone-content"></div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="footer-note">* การลงทุนมีความเสี่ยง ผลตอบแทนในอดีตไม่ได้รับประกันอนาคต · ไม่ใช่คำแนะนำการลงทุน</div>
-
-<script>
-// ─── Constants ───
-const COLORS = ["#f59e0b","#22c55e","#3b82f6","#a78bfa","#f43f5e","#06b6d4","#fb923c","#84cc16","#e879f9","#38bdf8"];
-
-// ─── Formatters ───
-function fBaht(v){if(v>=1e9)return`฿${(v/1e9).toFixed(2)}B`;if(v>=1e6)return`฿${(v/1e6).toFixed(2)}M`;if(v>=1e3)return`฿${(v/1e3).toFixed(1)}K`;return`฿${Math.round(v)}`;}
-function fFull(v){return`฿${Math.round(v).toLocaleString('th-TH')}`;}
-function fNum(n){return n.toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2});}
-
-// ─── Tab switcher ───
-function switchTab(id, btn){
-  document.querySelectorAll('.tab-content').forEach(el=>el.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(el=>el.classList.remove('active'));
-  document.getElementById('tab-'+id).classList.add('active');
-  btn.classList.add('active');
+// ─── Formatters ───────────────────────────────────────────────────────────────
+function formatBaht(v) {
+  if (v >= 1_000_000_000) return `฿${(v/1e9).toFixed(2)}B`;
+  if (v >= 1_000_000)     return `฿${(v/1e6).toFixed(2)}M`;
+  if (v >= 1_000)         return `฿${(v/1e3).toFixed(1)}K`;
+  return `฿${Math.round(v)}`;
 }
-function switchSubTab(id, btn){
-  document.querySelectorAll('.sub-tab-content').forEach(el=>el.classList.remove('active'));
-  document.querySelectorAll('.sub-tab-btn').forEach(el=>el.classList.remove('active'));
-  document.getElementById('subtab-'+id).classList.add('active');
-  btn.classList.add('active');
+function formatFull(v) { return `฿${Math.round(v).toLocaleString("th-TH")}`; }
+function formatNumber(n) {
+  return n.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-// ─── DCA Math ───
-function calcDCA(monthly, years, annualRate){
-  const r = annualRate/100/12;
+// ─── DCA core math ────────────────────────────────────────────────────────────
+function calcDCA(monthly, years, annualRate) {
+  const r = annualRate / 100 / 12;
   let portfolio = 0;
   const data = [];
-  for(let m=1;m<=years*12;m++){
-    portfolio = (portfolio+monthly)*(1+r);
-    if(m%12===0) data.push({year:m/12,portfolio:Math.round(portfolio),invested:monthly*m});
+  for (let m = 1; m <= years * 12; m++) {
+    portfolio = (portfolio + monthly) * (1 + r);
+    if (m % 12 === 0) data.push({ year: m/12, portfolio: Math.round(portfolio), invested: monthly * m });
   }
   return data;
 }
 
-// ═══ TAB 1: Simple DCA ═══
-function calcSimple(){
-  const name = document.getElementById('s-name').value;
-  const monthly = parseFloat(document.getElementById('s-monthly').value);
-  const months = parseInt(document.getElementById('s-months').value);
-  const growth = parseFloat(document.getElementById('s-growth').value)/100/12;
-  if(!monthly||!months) return;
-  let total=0;
-  const rows=[];
-  for(let i=1;i<=months;i++){
-    total = growth>0?total*(1+growth)+monthly:total+monthly;
-    if(i%Math.max(1,Math.floor(months/12))===0||i===months) rows.push({month:i,total});
-  }
-  const invested=monthly*months;
-  const gain=total-invested;
-  document.getElementById('s-asset-name').textContent=name||'ทรัพย์สิน';
-  document.getElementById('s-invested').textContent=`฿${fNum(invested)}`;
-  document.getElementById('s-final').textContent=`฿${fNum(total)}`;
-  const gainEl=document.getElementById('s-gain');
-  gainEl.textContent=`${gain>=0?'+':''}฿${fNum(gain)}`;
-  gainEl.style.color=gain>=0?'#22c55e':'#f43f5e';
-  document.getElementById('s-month-end').textContent=`เดือน ${months}`;
-  // Mini bars
-  const barsEl=document.getElementById('s-bars');
-  barsEl.innerHTML='';
-  const maxV=rows[rows.length-1].total;
-  rows.forEach(r=>{
-    const h=Math.max(4,(r.total/maxV)*100);
-    const col=document.createElement('div');col.className='mini-bar-col';
-    col.title=`เดือน ${r.month}: ฿${fNum(r.total)}`;
-    const bar=document.createElement('div');bar.className='mini-bar';
-    bar.style.height=h+'%';
-    col.appendChild(bar);barsEl.appendChild(col);
-  });
-  const res=document.getElementById('simple-result');
-  res.style.display='block';res.classList.add('fadeUp');
-}
-
-// ═══ TAB 2: Portfolio ═══
-let portfolioAssets=[];
-let ptIdCounter=0;
-
-function addPortfolioAsset(){
-  const id=++ptIdCounter;
-  const color=COLORS[(id-1)%COLORS.length];
-  portfolioAssets.push({id,name:'',amount:'',growth:'',holdMonths:'',currentValue:'',color});
-  renderPortfolio();
-}
-
-function removePortfolioAsset(id){
-  portfolioAssets=portfolioAssets.filter(a=>a.id!==id);
-  renderPortfolio();
-}
-
-function updatePortfolioAsset(id,field,val){
-  const a=portfolioAssets.find(a=>a.id===id);
-  if(a){a[field]=val;renderPortfolio();}
-}
-
-function computePortfolio(){
-  return portfolioAssets.map(a=>{
-    const amt=parseFloat(a.amount)||0;
-    const g=parseFloat(a.growth)/100;
-    const mo=parseInt(a.holdMonths)||0;
-    const cur=parseFloat(a.currentValue);
-    const value=(isNaN(cur)||a.currentValue==='')?amt*Math.pow(1+g/12,mo):cur;
-    const gain=value-amt;
-    const pct=amt>0?((gain/amt)*100).toFixed(1):'0.0';
-    return{...a,value,gain,pct};
-  });
-}
-
-function renderPortfolio(){
-  const computed=computePortfolio();
-  const totalInvested=computed.reduce((s,a)=>s+(parseFloat(a.amount)||0),0);
-  const totalValue=computed.reduce((s,a)=>s+a.value,0);
-  const totalGain=totalValue-totalInvested;
-
-  if(totalInvested>0){
-    document.getElementById('portfolio-summary').style.display='block';
-    document.getElementById('pt-total').textContent=`฿${fNum(totalValue)}`;
-    document.getElementById('pt-invested').textContent=`฿${fNum(totalInvested)}`;
-    const gainEl=document.getElementById('pt-gain');
-    gainEl.textContent=`${totalGain>=0?'+':''}฿${fNum(totalGain)}`;
-    gainEl.style.color=totalGain>=0?'#22c55e':'#f43f5e';
-  } else {
-    document.getElementById('portfolio-summary').style.display='none';
-  }
-
-  // Donut
-  if(totalValue>0){
-    const wrap=document.getElementById('portfolio-donut-wrap');
-    wrap.style.display='block';
-    wrap.innerHTML=renderDonutSVG(computed,totalValue);
-  }
-
-  // Asset cards
-  const container=document.getElementById('portfolio-assets');
-  container.innerHTML='';
-  computed.forEach((a,i)=>{
-    const div=document.createElement('div');
-    div.className='asset-row';
-    div.style.borderLeft=`3px solid ${a.color}`;
-    div.innerHTML=`
-      <div style="display:flex;gap:10px;align-items:flex-start">
-        <div style="flex:1">
-          <div class="label">ชื่อทรัพย์สิน</div>
-          <input class="inp" placeholder="เช่น SPUS, SCB…" value="${a.name}" style="color:${a.name?a.color:'#e2e8f0'};font-weight:700" oninput="updatePortfolioAsset(${a.id},'name',this.value)">
+// ─── Custom Recharts Tooltip ──────────────────────────────────────────────────
+const CustomTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null;
+  const invested  = payload.find(p => p.dataKey === "totalInvested");
+  const combined  = payload.find(p => p.dataKey === "combined");
+  const rest      = payload.filter(p => p.dataKey !== "totalInvested" && p.dataKey !== "combined");
+  return (
+    <div style={{ background:"rgba(8,10,18,0.97)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:10, padding:"12px 16px", fontFamily:"'DM Mono',monospace", fontSize:12, minWidth:200 }}>
+      <div style={{ color:"#f59e0b", fontWeight:700, marginBottom:8 }}>ปีที่ {label}</div>
+      {combined && (
+        <div style={{ color:"#fff", display:"flex", justifyContent:"space-between", gap:16, borderBottom:"1px solid rgba(255,255,255,0.08)", paddingBottom:6, marginBottom:6 }}>
+          <span>🏆 รวมทั้งหมด</span><span style={{fontWeight:800}}>{formatBaht(combined.value)}</span>
         </div>
-        <button onclick="removePortfolioAsset(${a.id})" style="background:transparent;border:none;color:#334155;font-size:18px;cursor:pointer;margin-top:18px;border-radius:6px;padding:2px 6px">×</button>
-      </div>
-      <div class="asset-grid">
-        <div><div class="label">ต้นทุน (฿)</div><input class="inp" type="number" placeholder="50000" value="${a.amount}" oninput="updatePortfolioAsset(${a.id},'amount',this.value)"></div>
-        <div><div class="label">มูลค่าปัจจุบัน (฿)</div><input class="inp" type="number" placeholder="ว่าง = คำนวณ" value="${a.currentValue}" oninput="updatePortfolioAsset(${a.id},'currentValue',this.value)"></div>
-        <div><div class="label">อัตราเติบโต/ปี (%)</div><input class="inp" type="number" placeholder="10" value="${a.growth}" oninput="updatePortfolioAsset(${a.id},'growth',this.value)"></div>
-        <div><div class="label">ถือครอง (เดือน)</div><input class="inp" type="number" placeholder="24" value="${a.holdMonths}" oninput="updatePortfolioAsset(${a.id},'holdMonths',this.value)"></div>
-      </div>
-      ${parseFloat(a.amount)>0?`<div class="asset-val-bar"><span style="color:#94a3b8">มูลค่า: <b style="font-family:'DM Mono',monospace;color:#f59e0b">฿${fNum(a.value)}</b></span><span style="font-family:'DM Mono',monospace;color:${a.gain>=0?'#22c55e':'#f43f5e'}">${a.gain>=0?'▲':'▼'} ${a.pct}%</span></div>`:''}
-    `;
-    container.appendChild(div);
+      )}
+      {rest.map((p,i) => (
+        <div key={i} style={{ color:p.color, marginBottom:3, display:"flex", justifyContent:"space-between", gap:16 }}>
+          <span>{p.name}</span><span>{formatBaht(p.value)}</span>
+        </div>
+      ))}
+      {invested && (
+        <div style={{ color:"#475569", marginTop:6, paddingTop:6, borderTop:"1px solid rgba(255,255,255,0.08)", display:"flex", justifyContent:"space-between" }}>
+          <span>ลงทุนไป</span><span>{formatBaht(invested.value)}</span>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── Donut Chart (SVG) ────────────────────────────────────────────────────────
+function DonutChart({ assets, total }) {
+  const filtered = assets.filter(a => a.value > 0);
+  let cumulative = 0;
+  const cx = 80, cy = 80, r = 60, strokeW = 22;
+  const circ = 2 * Math.PI * r;
+  const slices = filtered.map(a => {
+    const pct = a.value / total;
+    const dasharray = `${pct * circ} ${circ}`;
+    const dashoffset = -cumulative * circ;
+    cumulative += pct;
+    return { ...a, dasharray, dashoffset, pct };
   });
-}
-
-function renderDonutSVG(assets,total){
-  const filtered=assets.filter(a=>a.value>0);
-  const cx=80,cy=80,r=60,sw=22,circ=2*Math.PI*r;
-  let cum=0;
-  const slices=filtered.map(a=>{
-    const pct=a.value/total;
-    const slice={...a,pct,dasharray:`${pct*circ} ${circ}`,dashoffset:-cum*circ};
-    cum+=pct;return slice;
-  });
-  const displayVal=total>=1e6?`฿${(total/1e6).toFixed(2)}M`:total>=1e3?`฿${(total/1e3).toFixed(1)}K`:`฿${Math.round(total)}`;
-  const svgCircles=slices.map(s=>`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s.color}" stroke-width="${sw}" stroke-dasharray="${s.dasharray}" stroke-dashoffset="${s.dashoffset}" style="transform:rotate(-90deg);transform-origin:80px 80px"/>`).join('');
-  const legend=slices.map(s=>`<div style="display:flex;align-items:center;gap:8px"><div style="width:8px;height:8px;border-radius:50%;background:${s.color};flex-shrink:0"></div><span style="font-size:12px;color:#e2e8f0;flex:1">${s.name||'ทรัพย์สิน'}</span><span style="font-family:'DM Mono',monospace;font-size:11px;color:#64748b">${(s.pct*100).toFixed(1)}%</span></div>`).join('');
-  return`<div class="donut-wrap"><svg viewBox="0 0 160 160" style="width:120px;height:120px;flex-shrink:0"><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#1a2035" stroke-width="${sw}"/>${svgCircles}<text x="${cx}" y="${cy-8}" text-anchor="middle" style="font-family:'DM Sans';font-size:9px;fill:#64748b">พอร์ตรวม</text><text x="${cx}" y="${cy+12}" text-anchor="middle" style="font-family:'DM Mono',monospace;font-size:11px;fill:#f59e0b;font-weight:bold">${displayVal}</text></svg><div style="flex:1;display:flex;flex-direction:column;gap:6px">${legend}</div></div>`;
-}
-
-// Init portfolio with one asset
-addPortfolioAsset();
-
-// ═══ TAB 3: Multi DCA ═══
-let multiAssets=[
-  {id:1,name:'SPUS',cagr:'15',alloc:'34',enabled:true,color:COLORS[0]},
-  {id:2,name:'HLAL',cagr:'12',alloc:'33',enabled:true,color:COLORS[1]},
-  {id:3,name:'TISCO',cagr:'10',alloc:'33',enabled:true,color:COLORS[2]},
-];
-let multiIdCounter=3;
-let lineChartInstance=null;
-
-function addMultiAsset(){
-  multiIdCounter++;
-  const color=COLORS[multiIdCounter%COLORS.length];
-  multiAssets.push({id:multiIdCounter,name:'',cagr:'',alloc:'0',enabled:true,color});
-  updateMulti();
-}
-
-function removeMultiAsset(id){
-  multiAssets=multiAssets.filter(a=>a.id!==id);
-  updateMulti();
-}
-
-function toggleMultiAsset(id){
-  const a=multiAssets.find(a=>a.id===id);
-  if(a){a.enabled=!a.enabled;updateMulti();}
-}
-
-function updateMultiField(id,field,val){
-  const a=multiAssets.find(a=>a.id===id);
-  if(a){a[field]=val;updateMulti();}
-}
-
-function autoBalance(){
-  const enabled=multiAssets.filter(a=>a.enabled);
-  const each=(100/enabled.length).toFixed(1);
-  multiAssets.forEach(a=>{if(a.enabled)a.alloc=each;});
-  updateMulti();
-}
-
-function updateMulti(){
-  renderMultiRows();
-  renderAllocDonut();
-  const monthly=parseFloat(document.getElementById('m-monthly').value)||0;
-  const years=parseInt(document.getElementById('m-years').value)||0;
-  const ready=monthly>0&&years>0;
-  const enabledAssets=multiAssets.filter(a=>a.enabled&&a.name&&parseFloat(a.cagr)>0&&parseFloat(a.alloc)>0);
-  const totalAlloc=multiAssets.filter(a=>a.enabled).reduce((s,a)=>s+(parseFloat(a.alloc)||0),0);
-  const allocOk=Math.abs(totalAlloc-100)<0.01;
-
-  document.getElementById('multi-prompt').style.display=ready?'none':'block';
-  const warn=document.getElementById('multi-alloc-warn');
-  if(ready&&!allocOk&&totalAlloc>0){warn.style.display='block';document.getElementById('warn-alloc').textContent=totalAlloc.toFixed(1);}
-  else warn.style.display='none';
-
-  if(!ready||!enabledAssets.length){document.getElementById('multi-results').style.display='none';return;}
-
-  // Compute chart data
-  const chartData=[];
-  for(let y=1;y<=years;y++) chartData.push({year:y,totalInvested:monthly*y*12,combined:0});
-  enabledAssets.forEach(a=>{
-    const share=(parseFloat(a.alloc)||0)/100;
-    const m=monthly*share;
-    calcDCA(m,years,parseFloat(a.cagr)).forEach(r=>{
-      chartData[r.year-1][a.name]=r.portfolio;
-      chartData[r.year-1].combined=(chartData[r.year-1].combined||0)+r.portfolio;
-    });
-  });
-
-  // Summaries
-  const summaries=enabledAssets.map(a=>{
-    const share=(parseFloat(a.alloc)||0)/100;
-    const m=monthly*share;
-    const rows=calcDCA(m,years,parseFloat(a.cagr));
-    const fin=rows[rows.length-1]?.portfolio??0;
-    const inv=m*years*12;
-    return{...a,monthlyAmount:m,final:fin,invested:inv,
-      multiplier:inv>0?(fin/inv).toFixed(1):'—',
-      hit1M:rows.find(r=>r.portfolio>=1e6)?.year??null,
-      hit10M:rows.find(r=>r.portfolio>=1e7)?.year??null,
-      hit100M:rows.find(r=>r.portfolio>=1e8)?.year??null};
-  });
-
-  const combinedFinal=summaries.reduce((s,a)=>s+a.final,0);
-  const totalInvested=monthly*years*12;
-  const mult=totalInvested>0?(combinedFinal/totalInvested).toFixed(1):'—';
-
-  // Hero
-  document.getElementById('multi-results').style.display='block';
-  document.getElementById('hero-years').textContent=years;
-  document.getElementById('hero-final').textContent=fBaht(combinedFinal);
-  document.getElementById('hero-final-full').textContent=fFull(combinedFinal);
-  document.getElementById('hero-invested').textContent=fBaht(totalInvested);
-  document.getElementById('hero-mult').textContent=`${mult}x 🔥`;
-
-  // Mini cards
-  const miniGrid=document.getElementById('asset-mini-cards');
-  miniGrid.innerHTML=summaries.map(a=>`
-    <div class="asset-mini-card" style="background:${a.color}0d;border:1px solid ${a.color}28">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:13px;font-weight:800;color:${a.color};font-family:'DM Mono',monospace">${a.name}</span>
-        <span style="font-size:11px;color:${a.color};background:${a.color}20;border-radius:5px;padding:1px 6px;font-family:'DM Mono',monospace">${a.alloc}%</span>
-      </div>
-      <div style="font-size:10px;color:#475569;font-family:'DM Mono',monospace;margin-top:2px">฿${Math.round(a.monthlyAmount).toLocaleString()}/เดือน</div>
-      <div style="font-size:18px;font-weight:800;color:#e2e8f0;margin-top:6px">${fBaht(a.final)}</div>
-      <div style="font-size:11px;color:#22c55e;margin-top:4px">${a.multiplier}x</div>
-      <div style="font-size:10px;color:#64748b;margin-top:2px;font-family:'DM Mono',monospace">100M: ${a.hit100M?`ปีที่ ${a.hit100M}`:'—'}</div>
-    </div>
-  `).join('');
-
-  // Chart
-  renderLineChart(chartData,enabledAssets);
-
-  // Table
-  const step=Math.max(1,Math.floor(years/10));
-  const tableRows=chartData.filter((_,i)=>(i+1)%step===0||i===chartData.length-1);
-  const table=document.getElementById('data-table');
-  const thCols=enabledAssets.map(a=>`<th style="color:${a.color}">${a.name}<br><span style="color:#475569;font-weight:400">${a.alloc}%</span></th>`).join('');
-  table.innerHTML=`<thead><tr style="background:rgba(255,255,255,0.04)"><th style="text-align:left">ปี</th><th>ลงทุนไป</th>${thCols}<th style="color:#f59e0b">รวม</th></tr></thead>
-  <tbody>${tableRows.map(row=>{
-    const hit=(row.combined||0)>=1e8;
-    const tdCols=enabledAssets.map(a=>`<td style="color:${a.color}">${fBaht(row[a.name]||0)}</td>`).join('');
-    return`<tr style="${hit?'background:rgba(245,158,11,0.05)':''}"><td>${row.year}</td><td style="color:#475569">${fBaht(row.totalInvested)}</td>${tdCols}<td style="color:${hit?'#f59e0b':'#fff'};font-weight:${hit?800:600}">${fBaht(row.combined||0)}</td></tr>`;
-  }).join('')}</tbody>`;
-
-  // Milestone
-  const c1M=chartData.find(r=>(r.combined||0)>=1e6)?.year??null;
-  const c10M=chartData.find(r=>(r.combined||0)>=1e7)?.year??null;
-  const c100M=chartData.find(r=>(r.combined||0)>=1e8)?.year??null;
-  function msBadge(yr,color){
-    if(!yr) return`<span style="font-size:11px;color:#334155">—</span>`;
-    return`<div class="ms-badge" style="background:${color?color+'18':'rgba(245,158,11,0.15)'};border:1px solid ${color?color+'40':'rgba(245,158,11,0.4)'};color:${color||'#f59e0b'}">ปีที่ ${yr}</div>`;
-  }
-  const msContent=document.getElementById('milestone-content');
-  msContent.innerHTML=`
-    <div class="milestone-grid milestone-header"><span>ASSET</span><span style="text-align:center">฿1M</span><span style="text-align:center">฿10M</span><span style="text-align:center">฿100M</span></div>
-    <div class="milestone-grid milestone-row" style="background:rgba(245,158,11,0.05)">
-      <div><div style="font-weight:800;color:#f59e0b;font-family:'DM Mono',monospace;font-size:13px">🏆 รวม</div><div style="font-size:10px;color:#475569">ทั้งพอร์ต</div></div>
-      <div style="text-align:center">${msBadge(c1M,null)}</div><div style="text-align:center">${msBadge(c10M,null)}</div><div style="text-align:center">${msBadge(c100M,null)}</div>
-    </div>
-    ${summaries.map(a=>`
-    <div class="milestone-grid milestone-row">
-      <div><div style="font-weight:800;color:${a.color};font-family:'DM Mono',monospace;font-size:13px">${a.name}</div><div style="font-size:10px;color:#475569">${a.alloc}% · ${a.cagr}%/ปี</div></div>
-      <div style="text-align:center">${msBadge(a.hit1M,a.color)}</div><div style="text-align:center">${msBadge(a.hit10M,a.color)}</div><div style="text-align:center">${msBadge(a.hit100M,a.color)}</div>
-    </div>`).join('')}
-    <div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.06);font-size:12px;color:#64748b;font-family:'DM Mono',monospace">
-      ลงทุนรวม ${years} ปี = <span style="color:#f59e0b;font-weight:700">${fFull(totalInvested)}</span>
-    </div>
-  `;
-}
-
-function renderMultiRows(){
-  const container=document.getElementById('multi-asset-rows');
-  container.innerHTML=multiAssets.map(a=>`
-    <div class="asset-row-multi">
-      <button class="toggle-dot" style="color:${a.color};background:${a.enabled?a.color:'transparent'}" onclick="toggleMultiAsset(${a.id})"></button>
-      <input class="inp" placeholder="NVDA…" value="${a.name}" style="opacity:${a.enabled?1:0.4};font-weight:700;color:${a.name?a.color:'#475569'}"
-        oninput="updateMultiField(${a.id},'name',this.value.toUpperCase())">
-      <input class="inp" type="number" placeholder="20" value="${a.cagr}" style="opacity:${a.enabled?1:0.4};text-align:center"
-        oninput="updateMultiField(${a.id},'cagr',this.value)">
-      <div style="position:relative">
-        <input class="inp" type="number" placeholder="0" value="${a.alloc}" style="opacity:${a.enabled?1:0.4};text-align:center;padding-right:16px;${a.enabled&&parseFloat(a.alloc)>0?`border-color:${a.color}60`:''}"
-          oninput="updateMultiField(${a.id},'alloc',this.value)">
-        <span style="position:absolute;right:7px;top:50%;transform:translateY(-50%);font-size:10px;color:#475569;pointer-events:none">%</span>
-      </div>
-      <button class="btn-remove" onclick="removeMultiAsset(${a.id})">×</button>
-    </div>
-  `).join('');
-}
-
-function renderAllocDonut(){
-  const active=multiAssets.filter(a=>a.enabled&&(parseFloat(a.alloc)||0)>0);
-  const totalAlloc=multiAssets.filter(a=>a.enabled).reduce((s,a)=>s+(parseFloat(a.alloc)||0),0);
-  const allocColor=totalAlloc>100?'#f43f5e':totalAlloc===0?'#475569':totalAlloc<100?'#f59e0b':'#22c55e';
-  const monthly=parseFloat(document.getElementById('m-monthly').value)||0;
-  const cx=72,cy=72,r=54,sw=20,circ=2*Math.PI*r;
-  let cum=0;
-  const slices=active.map(a=>{
-    const pct=Math.min((parseFloat(a.alloc)||0)/100,1);
-    const slice={...a,pct,dasharray:`${pct*circ} ${circ}`,dashoffset:-cum*circ};
-    cum+=pct;return slice;
-  });
-  const svgSlices=slices.map(s=>`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s.color}" stroke-width="${sw}" stroke-dasharray="${s.dasharray}" stroke-dashoffset="${s.dashoffset}" style="transform:rotate(-90deg);transform-origin:${cx}px ${cy}px;transition:stroke-dasharray 0.3s"/>`).join('');
-  const legend=slices.map(s=>`
-    <div style="display:flex;align-items:center;gap:8px">
-      <div style="width:10px;height:10px;border-radius:50%;background:${s.color};flex-shrink:0;box-shadow:0 0 6px ${s.color}80"></div>
-      <span style="font-size:12px;font-weight:700;color:${s.color};font-family:'DM Mono',monospace;flex:1">${s.name||'?'}</span>
-      <span style="font-size:12px;color:#94a3b8;font-family:'DM Mono',monospace">${s.alloc}%</span>
-    </div>
-    ${monthly>0?`<div style="font-size:10px;color:${s.color};font-family:'DM Mono',monospace;display:flex;justify-content:space-between;padding-left:18px"><span>${s.name||'?'}</span><span style="color:#64748b">฿${Math.round(monthly*(parseFloat(s.alloc)||0)/100).toLocaleString()}/เดือน</span></div>`:''}
-  `).join('');
-
-  const wrap=document.getElementById('alloc-donut-wrap');
-  wrap.style.borderColor=`${allocColor}30`;
-  wrap.innerHTML=`
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <span style="font-size:11px;color:#64748b;font-family:'DM Mono',monospace">สัดส่วนพอร์ต</span>
-      <span style="font-size:12px;font-weight:800;color:${allocColor};font-family:'DM Mono',monospace">
-        ${totalAlloc.toFixed(1)}% ${totalAlloc===100?'✅':totalAlloc>100?'⚠️ เกิน':`(เหลือ ${(100-totalAlloc).toFixed(1)}%)`}
-      </span>
-    </div>
-    <div style="display:flex;align-items:center;gap:16px">
-      <svg viewBox="0 0 144 144" style="width:110px;height:110px;flex-shrink:0">
-        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="${sw}"/>
-        ${svgSlices}
-        <text x="${cx}" y="${cy-7}" text-anchor="middle" style="font-size:9px;fill:#64748b;font-family:'DM Mono',monospace">สัดส่วน</text>
-        <text x="${cx}" y="${cy+10}" text-anchor="middle" style="font-size:14px;font-weight:bold;fill:${totalAlloc===100?'#22c55e':allocColor};font-family:'DM Mono',monospace">${totalAlloc.toFixed(0)}%</text>
+  return (
+    <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:16, padding:12, background:"rgba(255,255,255,0.03)", borderRadius:12, border:"1px solid rgba(255,255,255,0.07)" }}>
+      <svg viewBox="0 0 160 160" style={{ width:120, height:120, flexShrink:0 }}>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#1a2035" strokeWidth={strokeW} />
+        {slices.map((s,i) => (
+          <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={s.color} strokeWidth={strokeW}
+            strokeDasharray={s.dasharray} strokeDashoffset={s.dashoffset}
+            style={{ transform:"rotate(-90deg)", transformOrigin:"80px 80px" }} />
+        ))}
+        <text x={cx} y={cy-8}  textAnchor="middle" style={{ fontFamily:"'DM Sans',sans-serif", fontSize:9,  fill:"#64748b" }}>พอร์ตรวม</text>
+        <text x={cx} y={cy+12} textAnchor="middle" style={{ fontFamily:"'DM Mono',monospace",  fontSize:11, fill:"#f59e0b", fontWeight:"bold" }}>฿{total>=1e6?`${(total/1e6).toFixed(2)}M`:total>=1e3?`${(total/1e3).toFixed(1)}K`:Math.round(total)}</text>
       </svg>
-      <div style="flex:1;display:flex;flex-direction:column;gap:7px">${legend}</div>
+      <div style={{ flex:1, display:"flex", flexDirection:"column", gap:6 }}>
+        {slices.map((s,i) => (
+          <div key={i} style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <div style={{ width:8, height:8, borderRadius:"50%", background:s.color, flexShrink:0 }} />
+            <span style={{ fontSize:12, color:"#e2e8f0", flex:1 }}>{s.name || `ทรัพย์สิน ${i+1}`}</span>
+            <span style={{ fontFamily:"'DM Mono',monospace", fontSize:11, color:"#64748b" }}>{(s.pct*100).toFixed(1)}%</span>
+          </div>
+        ))}
+      </div>
     </div>
-  `;
+  );
 }
 
-function renderLineChart(chartData,enabledAssets){
-  const legend=document.getElementById('chart-legend');
-  legend.innerHTML=enabledAssets.map(a=>`<div style="font-size:10px;color:${a.color};font-family:'DM Mono',monospace;display:flex;align-items:center;gap:4px"><div style="width:16px;height:2px;background:${a.color}"></div>${a.name} (${a.alloc}%)</div>`).join('');
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB 1 — Simple DCA Calculator
+// ═══════════════════════════════════════════════════════════════════════════════
+function SimpleDCA() {
+  const [name, setName]     = useState("");
+  const [monthly, setMonthly] = useState("");
+  const [months, setMonths]   = useState("");
+  const [growth, setGrowth]   = useState("");
+  const [results, setResults] = useState(null);
 
-  const labels=chartData.map(d=>d.year);
-  const datasets=[
-    {label:'ลงทุนไป',data:chartData.map(d=>d.totalInvested),borderColor:'#1e293b',borderWidth:1.5,borderDash:[4,4],pointRadius:0,fill:false},
-    {label:'รวม',data:chartData.map(d=>d.combined),borderColor:'rgba(255,255,255,0.5)',borderWidth:2.5,pointRadius:0,fill:false},
-    ...enabledAssets.map(a=>({label:a.name,data:chartData.map(d=>d[a.name]||0),borderColor:a.color,borderWidth:2,pointRadius:0,fill:false}))
+  const calculate = () => {
+    const m  = parseFloat(monthly);
+    const mo = parseInt(months);
+    const g  = parseFloat(growth) / 100 / 12;
+    if (!m || !mo) return;
+    let total = 0;
+    const rows = [];
+    for (let i = 1; i <= mo; i++) {
+      total = g > 0 ? total * (1 + g) + m : total + m;
+      if (i % Math.max(1, Math.floor(mo / 12)) === 0 || i === mo)
+        rows.push({ month: i, total });
+    }
+    const invested = m * mo;
+    setResults({ rows, invested, final: total, gain: total - invested });
+  };
+
+  const inp = {
+    background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)",
+    borderRadius:8, padding:"10px 12px", color:"#e2e8f0", fontSize:13,
+    fontFamily:"'DM Mono',monospace", outline:"none", width:"100%",
+  };
+
+  return (
+    <div style={{ padding:"0 16px" }}>
+      <div style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:14, padding:18, marginTop:16 }}>
+        <div style={{ fontSize:11, color:"#64748b", letterSpacing:2, fontFamily:"'DM Mono',monospace", marginBottom:14 }}>SIMPLE DCA CALC</div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+          {[
+            ["ชื่อทรัพย์สิน", name, setName, "text", "เช่น CPALL, KBANK…"],
+            ["DCA ต่อเดือน (฿)", monthly, setMonthly, "number", "5000"],
+            ["ระยะเวลา (เดือน)", months, setMonths, "number", "120"],
+            ["ผลตอบแทนต่อปี (%)", growth, setGrowth, "number", "7"],
+          ].map(([lbl, val, set, type, ph]) => (
+            <div key={lbl}>
+              <div style={{ fontSize:10, color:"#64748b", marginBottom:6, fontFamily:"'DM Mono',monospace", letterSpacing:1 }}>{lbl}</div>
+              <input style={inp} type={type} placeholder={ph} value={val} onChange={e => set(e.target.value)} />
+            </div>
+          ))}
+        </div>
+        <button onClick={calculate} style={{ marginTop:14, width:"100%", padding:13, background:"#f59e0b", border:"none", borderRadius:10, color:"#000", fontWeight:800, fontSize:15, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+          คำนวณ →
+        </button>
+      </div>
+
+      {results && (
+        <div style={{ background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:14, padding:16, marginTop:14, animation:"fadeUp 0.3s ease" }}>
+          <div style={{ fontSize:15, fontWeight:800, color:"#f59e0b", marginBottom:14, fontFamily:"'DM Mono',monospace" }}>
+            {name || "ทรัพย์สิน"}
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
+            {[
+              ["ลงทุนไป", `฿${formatNumber(results.invested)}`, "#3b82f6"],
+              ["มูลค่าสุดท้าย", `฿${formatNumber(results.final)}`, "#f59e0b"],
+              ["กำไรรวม", `${results.gain>=0?"+":""}฿${formatNumber(results.gain)}`, results.gain>=0?"#22c55e":"#f43f5e"],
+            ].map(([lbl, val, col]) => (
+              <div key={lbl} style={{ background:"rgba(0,0,0,0.3)", borderRadius:9, padding:"10px 8px", textAlign:"center", border:"1px solid rgba(255,255,255,0.06)" }}>
+                <div style={{ fontSize:10, color:"#64748b", marginBottom:5, fontFamily:"'DM Mono',monospace" }}>{lbl}</div>
+                <div style={{ fontFamily:"'DM Mono',monospace", fontSize:11, fontWeight:700, color:col }}>{val}</div>
+              </div>
+            ))}
+          </div>
+          {/* Mini bar chart */}
+          <div style={{ display:"flex", alignItems:"flex-end", gap:2, height:60, marginTop:16 }}>
+            {results.rows.map((r,i) => {
+              const maxV = results.rows[results.rows.length-1].total;
+              const h = Math.max(4, (r.total/maxV)*100);
+              return (
+                <div key={i} style={{ flex:1, height:"100%", display:"flex", alignItems:"flex-end" }}
+                  title={`เดือน ${r.month}: ฿${formatNumber(r.total)}`}>
+                  <div style={{ width:"100%", height:`${h}%`, background:"linear-gradient(to top,#3b82f6,#f59e0b)", borderRadius:"2px 2px 0 0", opacity:0.85, minHeight:4 }} />
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569", marginTop:4, fontFamily:"'DM Mono',monospace" }}>
+            <span>เดือน 1</span><span>เดือน {months}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB 2 — Portfolio Tracker
+// ═══════════════════════════════════════════════════════════════════════════════
+function PortfolioTracker() {
+  const [assets, setAssets] = useState([
+    { id:1, name:"", amount:"", growth:"", holdMonths:"", currentValue:"" },
+  ]);
+
+  const addAsset    = () => setAssets(p => [...p, { id:Date.now(), name:"", amount:"", growth:"", holdMonths:"", currentValue:"" }]);
+  const removeAsset = id => setAssets(p => p.filter(a => a.id !== id));
+  const updateAsset = (id, field, val) => setAssets(p => p.map(a => a.id===id ? {...a,[field]:val} : a));
+
+  const computed = useMemo(() => assets.map((a,i) => {
+    const amt = parseFloat(a.amount) || 0;
+    const g   = parseFloat(a.growth) / 100;
+    const mo  = parseInt(a.holdMonths) || 0;
+    const cur = parseFloat(a.currentValue);
+    const value = isNaN(cur)||a.currentValue==="" ? amt * Math.pow(1 + g/12, mo) : cur;
+    const gain = value - amt;
+    const pct  = amt > 0 ? ((gain/amt)*100).toFixed(1) : "0.0";
+    return { ...a, value, gain, pct, color: COLORS[i % COLORS.length] };
+  }), [assets]);
+
+  const totalInvested = computed.reduce((s,a) => s+(parseFloat(a.amount)||0), 0);
+  const totalValue    = computed.reduce((s,a) => s+a.value, 0);
+  const totalGain     = totalValue - totalInvested;
+
+  const inp = {
+    background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)",
+    borderRadius:8, padding:"9px 10px", color:"#e2e8f0", fontSize:13,
+    fontFamily:"'DM Mono',monospace", outline:"none", width:"100%",
+  };
+
+  return (
+    <div style={{ padding:"0 16px" }}>
+      {totalInvested > 0 && (
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginTop:16, background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:14, padding:"14px 12px", animation:"fadeUp 0.3s ease" }}>
+          {[
+            ["พอร์ตรวม", `฿${formatNumber(totalValue)}`, "#f59e0b"],
+            ["ลงทุนไป",  `฿${formatNumber(totalInvested)}`, "#94a3b8"],
+            ["กำไร/ขาดทุน", `${totalGain>=0?"+":""}฿${formatNumber(totalGain)}`, totalGain>=0?"#22c55e":"#f43f5e"],
+          ].map(([lbl,val,col]) => (
+            <div key={lbl} style={{ textAlign:"center" }}>
+              <div style={{ fontSize:10, color:"#64748b", fontFamily:"'DM Mono',monospace", marginBottom:4 }}>{lbl}</div>
+              <div style={{ fontFamily:"'DM Mono',monospace", fontSize:12, fontWeight:800, color:col }}>{val}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {totalValue > 0 && <DonutChart assets={computed} total={totalValue} />}
+
+      <div style={{ display:"flex", flexDirection:"column", gap:12, marginTop:4 }}>
+        {assets.map((a,i) => (
+          <div key={a.id} style={{ background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.07)", borderLeft:`3px solid ${COLORS[i%COLORS.length]}`, borderRadius:12, padding:14 }}>
+            <div style={{ display:"flex", gap:10, alignItems:"flex-start" }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:10, color:"#64748b", marginBottom:6, fontFamily:"'DM Mono',monospace" }}>ชื่อทรัพย์สิน</div>
+                <input style={{...inp, color:a.name?COLORS[i%COLORS.length]:"#e2e8f0", fontWeight:700}} placeholder="เช่น SPUS, SCB…" value={a.name} onChange={e=>updateAsset(a.id,"name",e.target.value)} />
+              </div>
+              <button onClick={()=>removeAsset(a.id)} style={{ background:"transparent", border:"none", color:"#334155", fontSize:18, cursor:"pointer", marginTop:18, flexShrink:0, borderRadius:6, padding:"2px 6px" }}>×</button>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginTop:10 }}>
+              {[
+                ["ต้นทุน (฿)", "amount", "50000"],
+                ["มูลค่าปัจจุบัน (฿)", "currentValue", "ว่าง = คำนวณ"],
+                ["อัตราเติบโต/ปี (%)", "growth", "10"],
+                ["ถือครอง (เดือน)", "holdMonths", "24"],
+              ].map(([lbl,field,ph]) => (
+                <div key={field}>
+                  <div style={{ fontSize:10, color:"#64748b", marginBottom:6, fontFamily:"'DM Mono',monospace" }}>{lbl}</div>
+                  <input style={inp} type={field==="currentValue"?"number":"number"} placeholder={ph} value={a[field]}
+                    onChange={e=>updateAsset(a.id,field,e.target.value)} />
+                </div>
+              ))}
+            </div>
+            {parseFloat(a.amount) > 0 && (
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", background:"rgba(0,0,0,0.3)", borderRadius:8, padding:"8px 12px", marginTop:10, fontSize:13, border:"1px solid rgba(255,255,255,0.06)" }}>
+                <span style={{ color:"#94a3b8" }}>มูลค่า: <b style={{ fontFamily:"'DM Mono',monospace", color:"#f59e0b" }}>฿{formatNumber(computed[i].value)}</b></span>
+                <span style={{ fontFamily:"'DM Mono',monospace", color: computed[i].gain>=0?"#22c55e":"#f43f5e" }}>
+                  {computed[i].gain>=0?"▲":"▼"} {computed[i].pct}%
+                </span>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <button onClick={addAsset} style={{ marginTop:14, width:"100%", padding:12, background:"transparent", color:"#3b82f6", border:"1.5px dashed #3b82f680", borderRadius:10, fontSize:14, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+        + เพิ่มทรัพย์สิน
+      </button>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB 3 — Multi-Asset DCA Simulator
+// ═══════════════════════════════════════════════════════════════════════════════
+let idCounter = 5;
+
+function MultiDCA() {
+  const [monthly, setMonthly] = useState("");
+  const [years, setYears]     = useState("");
+  const [assets, setAssets]   = useState([
+    { id:1, name:"SPUS",  cagr:"15", alloc:"34", enabled:true, color:COLORS[0] },
+    { id:2, name:"HLAL",  cagr:"12", alloc:"33", enabled:true, color:COLORS[1] },
+    { id:3, name:"TISCO", cagr:"10", alloc:"33", enabled:true, color:COLORS[2] },
+  ]);
+  const [tab, setTab] = useState("chart");
+
+  const monthlyNum = parseFloat(monthly) || 0;
+  const yearsNum   = parseInt(years) || 0;
+  const ready      = monthlyNum > 0 && yearsNum > 0;
+
+  const totalAlloc = assets.filter(a=>a.enabled).reduce((s,a) => s+(parseFloat(a.alloc)||0), 0);
+  const allocOk    = Math.abs(totalAlloc - 100) < 0.01;
+
+  const update    = (id, field, val) => setAssets(p => p.map(a => a.id===id ? {...a,[field]:val} : a));
+  const toggle    = id => setAssets(p => p.map(a => a.id===id ? {...a,enabled:!a.enabled} : a));
+  const remove    = id => setAssets(p => p.filter(a => a.id!==id));
+  const addRow    = () => { const color=COLORS[++idCounter%COLORS.length]; setAssets(p=>[...p,{id:idCounter,name:"",cagr:"",alloc:"0",enabled:true,color}]); };
+  const autoBalance = () => { const n=assets.filter(a=>a.enabled).length; const each=(100/n).toFixed(1); setAssets(p=>p.map(a=>a.enabled?{...a,alloc:each}:a)); };
+
+  const enabledAssets = assets.filter(a=>a.enabled && a.name && parseFloat(a.cagr)>0 && parseFloat(a.alloc)>0);
+
+  const chartData = useMemo(() => {
+    if (!ready) return [];
+    const byYear = {};
+    for (let y=1; y<=yearsNum; y++) byYear[y]={ year:y, totalInvested:monthlyNum*y*12, combined:0 };
+    enabledAssets.forEach(a => {
+      const share = (parseFloat(a.alloc)||0)/100;
+      const m = monthlyNum * share;
+      calcDCA(m, yearsNum, parseFloat(a.cagr)).forEach(r => {
+        byYear[r.year][a.name] = r.portfolio;
+        byYear[r.year]["combined"] = (byYear[r.year]["combined"]||0) + r.portfolio;
+      });
+    });
+    return Object.values(byYear);
+  }, [monthlyNum, yearsNum, JSON.stringify(enabledAssets)]);
+
+  const summaries = useMemo(() => {
+    if (!ready) return [];
+    return enabledAssets.map(a => {
+      const share = (parseFloat(a.alloc)||0)/100;
+      const m = monthlyNum * share;
+      const rows = calcDCA(m, yearsNum, parseFloat(a.cagr));
+      const fin = rows[rows.length-1]?.portfolio ?? 0;
+      const inv = m * yearsNum * 12;
+      return { ...a, monthlyAmount:m, final:fin, invested:inv,
+        multiplier: inv>0?(fin/inv).toFixed(1):"—",
+        hit1M:   rows.find(r=>r.portfolio>=1_000_000)?.year ?? null,
+        hit10M:  rows.find(r=>r.portfolio>=10_000_000)?.year ?? null,
+        hit100M: rows.find(r=>r.portfolio>=100_000_000)?.year ?? null,
+      };
+    });
+  }, [monthlyNum, yearsNum, JSON.stringify(enabledAssets)]);
+
+  const combinedFinal    = summaries.reduce((s,a) => s+a.final, 0);
+  const totalInvested    = monthlyNum * yearsNum * 12;
+  const combinedMultiplier = totalInvested>0?(combinedFinal/totalInvested).toFixed(1):"—";
+
+  const tableRows = useMemo(() => {
+    if (!chartData.length) return [];
+    const step = Math.max(1, Math.floor(yearsNum/10));
+    return chartData.filter((_,i)=>(i+1)%step===0||i===chartData.length-1);
+  }, [chartData, yearsNum]);
+
+  const allocColor = totalAlloc>100?"#f43f5e":totalAlloc===0?"#475569":totalAlloc<100?"#f59e0b":"#22c55e";
+
+  const inp = {
+    background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)",
+    borderRadius:8, padding:"9px 10px", color:"#e2e8f0", fontSize:13,
+    fontFamily:"'DM Mono',monospace", outline:"none", width:"100%",
+  };
+
+  return (
+    <div style={{ padding:"0 16px" }}>
+
+      {/* Global inputs */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginTop:16, background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:14, padding:16 }}>
+        <div>
+          <div style={{ fontSize:10, color:"#64748b", marginBottom:6, fontFamily:"'DM Mono',monospace", letterSpacing:1 }}>DCA ต่อเดือน (฿)</div>
+          <input style={inp} type="number" placeholder="10000" value={monthly} onChange={e=>setMonthly(e.target.value)} />
+        </div>
+        <div>
+          <div style={{ fontSize:10, color:"#64748b", marginBottom:6, fontFamily:"'DM Mono',monospace", letterSpacing:1 }}>ระยะเวลา (ปี)</div>
+          <input style={inp} type="number" placeholder="30" value={years} onChange={e=>setYears(e.target.value)} />
+        </div>
+      </div>
+
+      {/* Asset table */}
+      <div style={{ background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:14, padding:14, marginTop:12 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+          <div style={{ fontSize:11, color:"#64748b", letterSpacing:2, fontFamily:"'DM Mono',monospace" }}>ASSETS</div>
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={autoBalance} style={{ background:"transparent", border:"1px solid rgba(255,255,255,0.1)", borderRadius:7, padding:"5px 12px", color:"#94a3b8", fontWeight:600, cursor:"pointer", fontSize:11, fontFamily:"'DM Mono',monospace" }}>⚖️ Auto</button>
+            <button onClick={addRow} style={{ background:"#f59e0b", border:"none", borderRadius:7, padding:"5px 14px", color:"#000", fontWeight:800, cursor:"pointer", fontSize:13 }}>+ เพิ่ม</button>
+          </div>
+        </div>
+
+        <div style={{ display:"grid", gridTemplateColumns:"24px 1fr 80px 72px 32px", gap:8, padding:"0 4px 8px", fontSize:10, color:"#475569", fontFamily:"'DM Mono',monospace", letterSpacing:1, borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
+          <span/><span>ชื่อหุ้น</span><span style={{textAlign:"center"}}>CAGR %</span><span style={{textAlign:"center"}}>สัดส่วน</span><span/>
+        </div>
+
+        <div style={{ display:"flex", flexDirection:"column", gap:6, marginTop:8 }}>
+          {assets.map(a => (
+            <div key={a.id} style={{ display:"grid", gridTemplateColumns:"24px 1fr 80px 72px 32px", gap:8, alignItems:"center" }}>
+              <button onClick={()=>toggle(a.id)} style={{ width:18, height:18, borderRadius:4, border:`2px solid ${a.color}`, background:a.enabled?a.color:"transparent", cursor:"pointer" }} />
+              <input style={{...inp, opacity:a.enabled?1:0.4, fontWeight:700, color:a.name?a.color:"#475569"}} placeholder="NVDA…" value={a.name} onChange={e=>update(a.id,"name",e.target.value.toUpperCase())} />
+              <input style={{...inp, opacity:a.enabled?1:0.4, textAlign:"center"}} placeholder="20" type="number" value={a.cagr} onChange={e=>update(a.id,"cagr",e.target.value)} />
+              <div style={{ position:"relative" }}>
+                <input style={{...inp, opacity:a.enabled?1:0.4, textAlign:"center", paddingRight:16, borderColor:a.enabled&&parseFloat(a.alloc)>0?`${a.color}60`:"rgba(255,255,255,0.12)"}} placeholder="0" type="number" value={a.alloc} onChange={e=>update(a.id,"alloc",e.target.value)} />
+                <span style={{ position:"absolute", right:7, top:"50%", transform:"translateY(-50%)", fontSize:10, color:"#475569", pointerEvents:"none" }}>%</span>
+              </div>
+              <button onClick={()=>remove(a.id)} style={{ background:"transparent", border:"none", color:"#334155", cursor:"pointer", fontSize:20, lineHeight:1 }}>×</button>
+            </div>
+          ))}
+        </div>
+
+        {/* Allocation Donut */}
+        {(() => {
+          const activeAssets = assets.filter(a => a.enabled && (parseFloat(a.alloc)||0) > 0);
+          const cx = 72, cy = 72, r = 54, sw = 20, circ = 2 * Math.PI * r;
+          let cum = 0;
+          const slices = activeAssets.map(a => {
+            const pct = Math.min((parseFloat(a.alloc)||0) / 100, 1);
+            const slice = { ...a, pct, dasharray:`${pct*circ} ${circ}`, dashoffset: -cum*circ };
+            cum += pct;
+            return slice;
+          });
+          return (
+            <div style={{ marginTop:12, background:"rgba(255,255,255,0.03)", borderRadius:12, border:`1px solid ${allocColor}30`, padding:"14px 12px" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+                <span style={{ fontSize:11, color:"#64748b", fontFamily:"'DM Mono',monospace" }}>สัดส่วนพอร์ต</span>
+                <span style={{ fontSize:12, fontWeight:800, color:allocColor, fontFamily:"'DM Mono',monospace" }}>
+                  {totalAlloc.toFixed(1)}% {totalAlloc===100?"✅":totalAlloc>100?"⚠️ เกิน":`(เหลือ ${(100-totalAlloc).toFixed(1)}%)`}
+                </span>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:16 }}>
+                {/* SVG Donut */}
+                <svg viewBox="0 0 144 144" style={{ width:110, height:110, flexShrink:0 }}>
+                  <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth={sw} />
+                  {slices.map((s,i) => (
+                    <circle key={i} cx={cx} cy={cy} r={r} fill="none"
+                      stroke={s.color} strokeWidth={sw}
+                      strokeDasharray={s.dasharray}
+                      strokeDashoffset={s.dashoffset}
+                      style={{ transform:"rotate(-90deg)", transformOrigin:`${cx}px ${cy}px`, transition:"stroke-dasharray 0.3s" }}
+                    />
+                  ))}
+                  {/* Center text */}
+                  <text x={cx} y={cy-7} textAnchor="middle" style={{ fontSize:9, fill:"#64748b", fontFamily:"'DM Mono',monospace" }}>สัดส่วน</text>
+                  <text x={cx} y={cy+10} textAnchor="middle" style={{ fontSize:14, fontWeight:"bold", fill: totalAlloc===100?"#22c55e":allocColor, fontFamily:"'DM Mono',monospace" }}>
+                    {totalAlloc.toFixed(0)}%
+                  </text>
+                </svg>
+                {/* Legend */}
+                <div style={{ flex:1, display:"flex", flexDirection:"column", gap:7 }}>
+                  {slices.map((s,i) => (
+                    <div key={i} style={{ display:"flex", alignItems:"center", gap:8 }}>
+                      <div style={{ width:10, height:10, borderRadius:"50%", background:s.color, flexShrink:0, boxShadow:`0 0 6px ${s.color}80` }} />
+                      <span style={{ fontSize:12, fontWeight:700, color:s.color, fontFamily:"'DM Mono',monospace", flex:1 }}>{s.name||"?"}</span>
+                      <span style={{ fontSize:12, color:"#94a3b8", fontFamily:"'DM Mono',monospace" }}>{s.alloc}%</span>
+                    </div>
+                  ))}
+                  {monthlyNum > 0 && slices.length > 0 && (
+                    <div style={{ marginTop:2, paddingTop:6, borderTop:"1px solid rgba(255,255,255,0.06)", display:"flex", flexDirection:"column", gap:4 }}>
+                      {slices.map(s => (
+                        <div key={s.id} style={{ fontSize:10, color:s.color, fontFamily:"'DM Mono',monospace", display:"flex", justifyContent:"space-between" }}>
+                          <span>{s.name||"?"}</span>
+                          <span style={{ color:"#64748b" }}>฿{Math.round(monthlyNum*(parseFloat(s.alloc)||0)/100).toLocaleString()}/เดือน</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+
+      {!ready && <div style={{ textAlign:"center", padding:"28px 0", color:"#334155", fontSize:13, fontFamily:"'DM Mono',monospace" }}>← กรอก DCA/เดือน และระยะเวลาก่อน</div>}
+
+      {ready && !allocOk && totalAlloc>0 && (
+        <div style={{ marginTop:10, padding:"12px 16px", background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.25)", borderRadius:12, fontSize:12, color:"#f59e0b", fontFamily:"'DM Mono',monospace", textAlign:"center" }}>
+          ⚠️ สัดส่วนรวม {totalAlloc.toFixed(1)}% — ต้องรวมได้ 100%
+        </div>
+      )}
+
+      {ready && enabledAssets.length>0 && (
+        <>
+          {/* Summary */}
+          <div style={{ background:"linear-gradient(135deg,rgba(245,158,11,0.12),rgba(245,158,11,0.04))", border:"1px solid rgba(245,158,11,0.3)", borderRadius:14, padding:"14px 16px", marginTop:14, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <div>
+              <div style={{ fontSize:10, color:"#f59e0b", fontFamily:"'DM Mono',monospace", letterSpacing:1 }}>🏆 พอร์ตรวมใน {yearsNum} ปี</div>
+              <div style={{ fontSize:24, fontWeight:800, color:"#fff", marginTop:4 }}>{formatBaht(combinedFinal)}</div>
+              <div style={{ fontSize:11, color:"#64748b", marginTop:2, fontFamily:"'DM Mono',monospace" }}>{formatFull(combinedFinal)}</div>
+            </div>
+            <div style={{ textAlign:"right" }}>
+              <div style={{ fontSize:11, color:"#64748b", fontFamily:"'DM Mono',monospace" }}>ลงทุนไป</div>
+              <div style={{ fontSize:15, fontWeight:700, color:"#94a3b8" }}>{formatBaht(totalInvested)}</div>
+              <div style={{ fontSize:13, color:"#22c55e", marginTop:4, fontWeight:700 }}>{combinedMultiplier}x 🔥</div>
+            </div>
+          </div>
+
+          {/* Per-asset cards */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:10, marginTop:10 }}>
+            {summaries.map(a => (
+              <div key={a.id} style={{ background:`${a.color}0d`, border:`1px solid ${a.color}28`, borderRadius:12, padding:12 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <span style={{ fontSize:13, fontWeight:800, color:a.color, fontFamily:"'DM Mono',monospace" }}>{a.name}</span>
+                  <span style={{ fontSize:11, color:a.color, background:`${a.color}20`, borderRadius:5, padding:"1px 6px", fontFamily:"'DM Mono',monospace" }}>{a.alloc}%</span>
+                </div>
+                <div style={{ fontSize:10, color:"#475569", fontFamily:"'DM Mono',monospace", marginTop:2 }}>฿{Math.round(a.monthlyAmount).toLocaleString()}/เดือน</div>
+                <div style={{ fontSize:18, fontWeight:800, color:"#e2e8f0", marginTop:6 }}>{formatBaht(a.final)}</div>
+                <div style={{ fontSize:11, color:"#22c55e", marginTop:4 }}>{a.multiplier}x</div>
+                <div style={{ fontSize:10, color:"#64748b", marginTop:2, fontFamily:"'DM Mono',monospace" }}>100M: {a.hit100M?`ปีที่ ${a.hit100M}`:"—"}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Sub-tabs */}
+          <div style={{ display:"flex", gap:4, marginTop:14 }}>
+            {[["chart","📈 กราฟ"],["table","📊 ตาราง"],["milestone","🏁 Milestone"]].map(([t,l]) => (
+              <button key={t} onClick={()=>setTab(t)} style={{ flex:1, padding:"9px 4px", borderRadius:8, border:`1px solid ${tab===t?"#f59e0b":"rgba(255,255,255,0.07)"}`, background:tab===t?"rgba(245,158,11,0.1)":"transparent", color:tab===t?"#f59e0b":"#64748b", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Mono',monospace" }}>
+                {l}
+              </button>
+            ))}
+          </div>
+
+          {/* Chart */}
+          {tab==="chart" && (
+            <div style={{ background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:14, padding:"18px 6px 12px", marginTop:10 }}>
+              <ResponsiveContainer width="100%" height={270}>
+                <LineChart data={chartData} margin={{ left:0, right:14, top:4, bottom:0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                  <XAxis dataKey="year" tick={{ fill:"#475569", fontSize:11 }} tickLine={false} label={{ value:"ปี", position:"insideBottomRight", offset:-4, fill:"#475569", fontSize:11 }} />
+                  <YAxis tickFormatter={formatBaht} tick={{ fill:"#475569", fontSize:10 }} tickLine={false} width={60} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <ReferenceLine y={100_000_000} stroke="#f59e0b" strokeDasharray="4 4" label={{ value:"100M", position:"right", fill:"#f59e0b", fontSize:10 }} />
+                  <Line type="monotone" dataKey="totalInvested" stroke="#1e293b" strokeWidth={1.5} dot={false} name="ลงทุนไป" strokeDasharray="4 4" />
+                  <Line type="monotone" dataKey="combined" stroke="#ffffff" strokeWidth={2.5} dot={false} name="รวม" opacity={0.5} />
+                  {enabledAssets.map(a => <Line key={a.id} type="monotone" dataKey={a.name} stroke={a.color} strokeWidth={2} dot={false} name={a.name} />)}
+                </LineChart>
+              </ResponsiveContainer>
+              <div style={{ display:"flex", flexWrap:"wrap", gap:8, padding:"6px 10px 0", justifyContent:"center" }}>
+                {enabledAssets.map(a => (
+                  <div key={a.id} style={{ fontSize:10, color:a.color, fontFamily:"'DM Mono',monospace", display:"flex", alignItems:"center", gap:4 }}>
+                    <div style={{ width:16, height:2, background:a.color }} />{a.name} ({a.alloc}%)
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Table */}
+          {tab==="table" && (
+            <div style={{ background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:14, marginTop:10, overflowX:"auto" }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", fontFamily:"'DM Mono',monospace", fontSize:12 }}>
+                <thead>
+                  <tr style={{ background:"rgba(255,255,255,0.04)" }}>
+                    <th style={{ padding:"10px 12px", textAlign:"left", color:"#64748b", fontSize:11 }}>ปี</th>
+                    <th style={{ padding:"10px 10px", textAlign:"right", color:"#475569", fontSize:11 }}>ลงทุนไป</th>
+                    {enabledAssets.map(a => <th key={a.id} style={{ padding:"10px 10px", textAlign:"right", color:a.color, fontSize:11 }}>{a.name}<br/><span style={{color:"#475569",fontWeight:400}}>{a.alloc}%</span></th>)}
+                    <th style={{ padding:"10px 10px", textAlign:"right", color:"#f59e0b", fontSize:11 }}>รวม</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tableRows.map((row,i) => {
+                    const hit = (row.combined||0)>=100_000_000;
+                    return (
+                      <tr key={i} style={{ borderTop:"1px solid rgba(255,255,255,0.05)", background:hit?"rgba(245,158,11,0.05)":"transparent" }}>
+                        <td style={{ padding:"9px 12px", color:"#94a3b8" }}>{row.year}</td>
+                        <td style={{ padding:"9px 10px", textAlign:"right", color:"#475569" }}>{formatBaht(row.totalInvested)}</td>
+                        {enabledAssets.map(a => <td key={a.id} style={{ padding:"9px 10px", textAlign:"right", color:a.color }}>{formatBaht(row[a.name]||0)}</td>)}
+                        <td style={{ padding:"9px 10px", textAlign:"right", color:hit?"#f59e0b":"#fff", fontWeight:hit?800:600 }}>{formatBaht(row.combined||0)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Milestone */}
+          {tab==="milestone" && (
+            <div style={{ background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:14, marginTop:10, overflow:"hidden" }}>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", background:"rgba(255,255,255,0.04)", padding:"10px 14px", fontSize:11, color:"#64748b", fontFamily:"'DM Mono',monospace" }}>
+                <span>ASSET</span>{["฿1M","฿10M","฿100M"].map(m=><span key={m} style={{textAlign:"center"}}>{m}</span>)}
+              </div>
+              {(() => {
+                const c1M  = chartData.find(r=>(r.combined||0)>=1_000_000)?.year ?? null;
+                const c10M = chartData.find(r=>(r.combined||0)>=10_000_000)?.year ?? null;
+                const c100M= chartData.find(r=>(r.combined||0)>=100_000_000)?.year ?? null;
+                return (
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", padding:"12px 14px", borderTop:"1px solid rgba(255,255,255,0.05)", background:"rgba(245,158,11,0.05)", alignItems:"center" }}>
+                    <div><div style={{ fontWeight:800, color:"#f59e0b", fontFamily:"'DM Mono',monospace", fontSize:13 }}>🏆 รวม</div><div style={{ fontSize:10, color:"#475569" }}>ทั้งพอร์ต</div></div>
+                    {[c1M,c10M,c100M].map((yr,j)=>(
+                      <div key={j} style={{ textAlign:"center" }}>
+                        {yr?<div style={{ display:"inline-block", background:"rgba(245,158,11,0.15)", border:"1px solid rgba(245,158,11,0.4)", borderRadius:8, padding:"4px 10px", fontSize:12, fontWeight:700, color:"#f59e0b", fontFamily:"'DM Mono',monospace" }}>ปีที่ {yr}</div>:<span style={{ fontSize:11, color:"#334155" }}>—</span>}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+              {summaries.map(a => (
+                <div key={a.id} style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", padding:"12px 14px", borderTop:"1px solid rgba(255,255,255,0.05)", alignItems:"center" }}>
+                  <div><div style={{ fontWeight:800, color:a.color, fontFamily:"'DM Mono',monospace", fontSize:13 }}>{a.name}</div><div style={{ fontSize:10, color:"#475569" }}>{a.alloc}% · {a.cagr}%/ปี</div></div>
+                  {[a.hit1M,a.hit10M,a.hit100M].map((yr,j)=>(
+                    <div key={j} style={{ textAlign:"center" }}>
+                      {yr?<div style={{ display:"inline-block", background:`${a.color}18`, border:`1px solid ${a.color}40`, borderRadius:8, padding:"4px 10px", fontSize:12, fontWeight:700, color:a.color, fontFamily:"'DM Mono',monospace" }}>ปีที่ {yr}</div>:<span style={{ fontSize:11, color:"#334155" }}>—</span>}
+                    </div>
+                  ))}
+                </div>
+              ))}
+              <div style={{ padding:"12px 16px", borderTop:"1px solid rgba(255,255,255,0.06)", fontSize:12, color:"#64748b", fontFamily:"'DM Mono',monospace" }}>
+                ลงทุนรวม {yearsNum} ปี = <span style={{ color:"#f59e0b", fontWeight:700 }}>{formatFull(totalInvested)}</span>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ROOT APP
+// ═══════════════════════════════════════════════════════════════════════════════
+export default function App() {
+  const [tab, setTab] = useState("simple");
+
+  const TABS = [
+    { id:"simple",    label:"📈 DCA", desc:"คำนวณรายตัว" },
+    { id:"portfolio", label:"💼 พอร์ต", desc:"ติดตามทรัพย์สิน" },
+    { id:"multi",     label:"🔀 Multi", desc:"จัดพอร์ต DCA" },
   ];
 
-  const ctx=document.getElementById('lineChart');
-  if(lineChartInstance){lineChartInstance.destroy();}
-  lineChartInstance=new Chart(ctx,{
-    type:'line',
-    data:{labels,datasets},
-    options:{
-      responsive:true,maintainAspectRatio:false,
-      plugins:{
-        legend:{display:false},
-        tooltip:{
-          backgroundColor:'rgba(8,10,18,0.97)',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,
-          titleColor:'#f59e0b',bodyColor:'#e2e8f0',
-          callbacks:{
-            title:ctx=>`ปีที่ ${ctx[0].label}`,
-            label:ctx=>`${ctx.dataset.label}: ${fBaht(ctx.raw)}`
-          }
-        },
-        annotation:{annotations:{line100M:{type:'line',yMin:1e8,yMax:1e8,borderColor:'#f59e0b',borderDash:[4,4],borderWidth:1,label:{content:'100M',enabled:true,color:'#f59e0b',font:{size:10}}}}}
-      },
-      scales:{
-        x:{ticks:{color:'#475569',font:{size:11}},grid:{color:'rgba(255,255,255,0.05)'},title:{display:true,text:'ปี',color:'#475569',font:{size:11}}},
-        y:{ticks:{color:'#475569',font:{size:10},callback:v=>fBaht(v)},grid:{color:'rgba(255,255,255,0.05)'}}
-      }
-    }
-  });
-}
+  return (
+    <div style={{ minHeight:"100vh", background:"#07090f", color:"#e2e8f0", fontFamily:"'DM Sans',sans-serif", paddingBottom:56 }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;700;800&family=DM+Mono:wght@400;700&display=swap');
+        * { box-sizing:border-box; margin:0; padding:0; }
+        input::placeholder { color:#334155; }
+        input:focus { border-color:rgba(245,158,11,0.5) !important; box-shadow:0 0 0 2px rgba(245,158,11,0.1) !important; }
+        input[type=number]::-webkit-inner-spin-button { opacity:0.3; }
+        @keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+      `}</style>
 
-// Init multi
-renderMultiRows();
-renderAllocDonut();
-</script>
-</body>
-</html>
+      {/* Header */}
+      <div style={{ background:"linear-gradient(135deg,#0f1629,#0a0e1a)", borderBottom:"1px solid rgba(245,158,11,0.15)", padding:"22px 20px 16px", textAlign:"center" }}>
+        <div style={{ fontSize:10, letterSpacing:4, color:"#f59e0b", fontFamily:"'DM Mono',monospace", marginBottom:6 }}>INVESTMENT PLANNER</div>
+        <div style={{ fontSize:22, fontWeight:800, letterSpacing:-0.5 }}>
+          วางแผน<span style={{ color:"#f59e0b" }}>การลงทุน</span>
+        </div>
+        <div style={{ fontSize:11, color:"#475569", marginTop:4, fontFamily:"'DM Mono',monospace" }}>DCA · Portfolio Tracker · Multi-Asset Simulator</div>
+      </div>
+
+      {/* Main Tab Bar */}
+      <div style={{ display:"flex", gap:0, margin:"16px 16px 0", background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:12, padding:4 }}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{
+            flex:1, padding:"10px 4px", border:"none",
+            background:tab===t.id?"rgba(245,158,11,0.12)":"transparent",
+            borderRadius:9,
+            color:tab===t.id?"#f59e0b":"#475569",
+            fontFamily:"'DM Sans',sans-serif", fontSize:13, fontWeight:700, cursor:"pointer",
+            transition:"all 0.18s",
+            outline:tab===t.id?"1px solid rgba(245,158,11,0.3)":"none",
+          }}>
+            <div>{t.label}</div>
+            <div style={{ fontSize:9, fontFamily:"'DM Mono',monospace", opacity:0.7, marginTop:2 }}>{t.desc}</div>
+          </button>
+        ))}
+      </div>
+
+      {tab === "simple"    && <SimpleDCA />}
+      {tab === "portfolio" && <PortfolioTracker />}
+      {tab === "multi"     && <MultiDCA />}
+
+      <div style={{ textAlign:"center", fontSize:10, color:"#1e293b", marginTop:24, padding:"0 16px", lineHeight:1.8 }}>
+        * การลงทุนมีความเสี่ยง ผลตอบแทนในอดีตไม่ได้รับประกันอนาคต · ไม่ใช่คำแนะนำการลงทุน
+      </div>
+    </div>
+  );
+}
